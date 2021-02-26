@@ -33,6 +33,10 @@ public class SoundSculpt extends Application {
 		Draw draw = new Draw(canv, tones);
 		draw.start();
 		
+		Play play = new Play(tones);
+		primaryStage.setOnCloseRequest(evt -> {
+			play.stop();
+		});
 		primaryStage.setScene(new Scene(pane));
 		primaryStage.show();
 	}
