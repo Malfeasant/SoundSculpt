@@ -9,9 +9,9 @@ import javax.sound.sampled.SourceDataLine;
 
 public class Play {
 	private static final int SAMPLE_RATE = 48000;
-	private static final int BITS_PER_SAMPLE = 16;
+	private static final int BYTES_PER_SAMPLE = 2;
 	private static AudioFormat FORMAT =
-			new AudioFormat(SAMPLE_RATE, BITS_PER_SAMPLE, 1, true, false);	// 48kHz signed 16-bit mono should be doable anywhere...
+			new AudioFormat(SAMPLE_RATE, BYTES_PER_SAMPLE * 8, 1, true, false);	// 48kHz signed 16-bit mono should be doable anywhere...
 	
 	private volatile boolean playing;	// volatile so it can be set by gui thread, read by playback thread
 	private final CopyOnWriteArrayList<Double> amps;
@@ -37,9 +37,28 @@ public class Play {
 	}
 	
 	private void start(SourceDataLine line) {
-		playing = true;
+		try {
+			line.open();
+			line.start();
+			playing = true;	// if open() fails, playing never starts
+		} catch (LineUnavailableException e) {
+			System.err.println("Problem opening line, playback will be disabled.");
+		}
+		final double timeScale = 440.0 / SAMPLE_RATE;	// fraction of a (fundamental) cycle per sample
+		final byte[] buffer = new byte[2400];	// allows for 11 cycles of fundamental (smallest whole number)
+		
 		while (playing) {
-			// TODO
+			for (int sample = 0; sample < 1200; sample++) {
+				double y = 0.0;
+				for (int ot = 0; ot < amps.size(); ot++) {
+					double radians = sample * timeScale * Math.PI * 2.0 * (ot + 1);
+					y += Math.sin(radians) * amps.get(ot) / (ot + 1);
+				}
+				y *= 16384.0;	// scale: max overtones should not exceed 32767...
+				buffer[sample * 2] = (byte) y;
+				buffer[sample * 2 + 1] = (byte) (y / 256);
+			}
+			line.write(buffer, 0, buffer.length);
 		}
 	}
 }
